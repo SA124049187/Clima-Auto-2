@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Control de Clima</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/paho-mqtt/1.0.1/mqttws31.min.js"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap" rel="stylesheet">
+  <style>
+    body {
+      font-family: 'Inter', sans-serif;
+      background-color: #030712;
+      color: #f3f4f6;
+    }
+  </style>
+</head>
+<body class="min-h-screen flex items-center justify-center p-4">
+
+  <div class="w-full max-w-sm bg-gray-900 border border-blue-900/50 rounded-2xl p-6 shadow-2xl space-y-6">
+    
+    <!-- Encabezado con estado -->
+    <div class="flex justify-between items-center pb-4 border-b border-gray-800">
+      <span class="text-sm font-semibold tracking-wide text-gray-300">CLIMA AUTO</span>
+      <div class="flex items-center space-x-2">
+        <span id="dot" class="w-2.5 h-2.5 rounded-full bg-red-500"></span>
+        <span id="status" class="text-xs text-gray-400">Offline</span>
+      </div>
+    </div>
+
+    <!-- Indicador Principal de Temperatura -->
+    <div class="text-center py-4">
+      <p class="text-xs font-medium text-gray-400 uppercase tracking-widest mb-1">Temperatura</p>
+      <div class="flex justify-center items-baseline space-x-1">
+        <span id="temp" class="text-6xl font-bold text-blue-400">--</span>
+        <span class="text-2xl text-blue-500 font-light">°C</span>
+      </div>
+    </div>
+
+    <!-- Selector de Velocidad -->
+    <div class="space-y-3">
+      <label class="block text-xs font-medium text-gray-400 uppercase tracking-wider text-center">Nivel de Aire</label>
+      <div class="grid grid-cols-4 gap-2">
+        <button onclick="setSpeed(0)" id="btn-0" class="speed-btn py-2.5 bg-blue-600 text-white font-bold text-sm rounded-lg transition-all">OFF</button>
+        <button onclick="setSpeed(1)" id="btn-1" class="speed-btn py-2.5 bg-gray-800 text-gray-300 font-semibold text-sm rounded-lg transition-all hover:bg-gray-700">1</button>
+        <button onclick="setSpeed(2)" id="btn-2" class="speed-btn py-2.5 bg-gray-800 text-gray-300 font-semibold text-sm rounded-lg transition-all hover:bg-gray-700">2</button>
+        <button onclick="setSpeed(3)" id="btn-3" class="speed-btn py-2.5 bg-gray-800 text-gray-300 font-semibold text-sm rounded-lg transition-all hover:bg-gray-700">3</button>
+      </div>
+    </div>
+
+    <!-- Botón Conectar -->
+    <button id="btn-conn" onclick="toggleConn()" 
+            class="w-full py-3 bg-blue-600 hover:bg-blue-500 text-white font-semibold text-sm rounded-xl transition-all shadow-md">
+      Conectar Sistema
+    </button>
+
+  </div>
+
+  <script>
+    let client = null;
+    let connected = false;
+    const host = "broker.hivemq.com";
+    const port = 8000;
+    const topicTemp = "auto/clima/temperatura";
+    const topicCmd = "auto/clima/comando";
+
+    function toggleConn() {
+      if (!connected) {
+        const id = "web_" + Math.random().toString(16).substr(2, 6);
+        client = new Paho.MQTT.Client(host, port, id);
+        client.onConnectionLost = () => updateUI(false);
+        client.onMessageArrived = (msg) => {
+          if (msg.destinationName === topicTemp) {
+            document.getElementById('temp').innerText = msg.payloadString;
+          }
+        };
+
+        client.connect({
+          onSuccess: () => {
+            updateUI(true);
+            client.subscribe(topicTemp);
+          },
+          onFailure: (e) => alert("Error al conectar: " + e.errorMessage),
+          useSSL: true
+        });
+      } else {
+        client.disconnect();
+        updateUI(false);
+      }
+    }
+
+    function updateUI(status) {
+      connected = status;
+      document.getElementById('dot').className = status ? "w-2.5 h-2.5 rounded-full bg-blue-400" : "w-2.5 h-2.5 rounded-full bg-red-500";
+      document.getElementById('status').innerText = status ? "En línea" : "Offline";
+      document.getElementById('btn-conn').innerText = status ? "Desconectar" : "Conectar Sistema";
+      document.getElementById('btn-conn').className = status 
+        ? "w-full py-3 bg-gray-800 hover:bg-gray-700 text-red-400 border border-red-500/30 font-semibold text-sm rounded-xl transition-all"
+        : "w-full py-3 bg-blue-600 hover:bg-blue-500 text-white font-semibold text-sm rounded-xl transition-all shadow-md";
+    }
+
+    function setSpeed(lvl) {
+      document.querySelectorAll('.speed-btn').forEach((b, i) => {
+        if (i === lvl) {
+          b.className = "speed-btn py-2.5 bg-blue-600 text-white font-bold text-sm rounded-lg transition-all shadow-sm";
+        } else {
+          b.className = "speed-btn py-2.5 bg-gray-800 text-gray-300 font-semibold text-sm rounded-lg transition-all hover:bg-gray-700";
+        }
+      });
+
+      if (connected) {
+        let msg = new Paho.MQTT.Message("SPEED_" + lvl);
+        msg.destinationName = topicCmd;
+        client.send(msg);
+      }
+    }
+  </script>
+</body>
+</html>
